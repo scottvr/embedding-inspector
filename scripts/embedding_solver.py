@@ -133,16 +133,16 @@ class EmbeddingGroupFinder:
       pass
 
 
-  def save_state(self):
-    save_keys = {i:self.__dict__[i] for i in self.__dict__.keys()}
-    for i in ["EMB_LENGTH", "all_embs", "orig_all_embs", "sorted_to_orig", "orig_to_sorted", "emb_weights", "emb_indices", "OPTIMIZATION_CHOICES", "PRINT_DURING_CALC", "START_OPTIMIZATION_EVALUATION", "OPTIMIZATION_PRINT_FREQUENCY", "SUCCESSIVE_OPTIMIZATION_RUNS", "SAVE_FREQUENCY", "USE_SORT_WEIGHTINGS", "MULTIPLIER_LIST", "MIN_OPT_ITER", "MAX_OPT_ITER", "OPT_SCALAR", "", "USE_WEIGHT_PENALTY1", "USE_WEIGHT_PENALTY2", "SPECIFIC_GROUP_ODDS", "SAME_EMB_ODDS", "SAME2_EMB_ODDS", "NEAR_EMB_ODDS", "OPTIONAL_EMB_ODDS", "METHOD"]:
-      try:
-        del save_keys[i]
-      except KeyError:
-        pass
-
-    with open("saved_state.minimize", "wb") as outfile:
-      pickle.dump(save_keys, outfile)
+#  def save_state(self):
+#    save_keys = {i:self.__dict__[i] for i in self.__dict__.keys()}
+#    for i in ["EMB_LENGTH", "all_embs", "orig_all_embs", "sorted_to_orig", "orig_to_sorted", "emb_weights", "emb_indices", "OPTIMIZATION_CHOICES", "PRINT_DURING_CALC", "START_OPTIMIZATION_EVALUATION", "OPTIMIZATION_PRINT_FREQUENCY", "SUCCESSIVE_OPTIMIZATION_RUNS", "SAVE_FREQUENCY", "USE_SORT_WEIGHTINGS", "MULTIPLIER_LIST", "MIN_OPT_ITER", "MAX_OPT_ITER", "OPT_SCALAR", "", "USE_WEIGHT_PENALTY1", "USE_WEIGHT_PENALTY2", "SPECIFIC_GROUP_ODDS", "SAME_EMB_ODDS", "SAME2_EMB_ODDS", "NEAR_EMB_ODDS", "OPTIONAL_EMB_ODDS", "METHOD"]:
+#      try:
+#        del save_keys[i]
+#      except KeyError:
+#        pass
+#
+#    with open("saved_state.minimize", "wb") as outfile:
+#      pickle.dump(save_keys, outfile)
       
 
 #  do_resume = False
@@ -413,7 +413,7 @@ class EmbeddingGroupFinder:
 
 
   last_printed_optimization_time = 0
-  last_save_state_time = 0
+#  last_save_state_time = 0
   last_save_near_emb_time = 0
   last_avg_score = 0
 
@@ -592,7 +592,7 @@ class EmbeddingGroupFinder:
       if self.do_printout == True:
         self.do_printout = False
         self.print_best([(self.best_emb_groups, self.iterations)])
-        self.save_state()
+#        self.save_state()
         self.save_near_emb_cache()
 
       if len(to_precache) > 0:
@@ -612,11 +612,11 @@ class EmbeddingGroupFinder:
       if self.iterations % self.SUCCESSIVE_OPTIMIZATION_RUNS == 0:
         self.select_optimization_methodology()
       
-      time_since_save_state = last_time - self.last_save_state_time
-      if time_since_save_state > self.SAVE_FREQUENCY and self.iterations != 0:
-        self.textbox += self.time_str() + f"<Saving state>                        \r"
-        self.save_state()
-        self.last_save_state_time = last_time
+#      time_since_save_state = last_time - self.last_save_state_time
+#      if time_since_save_state > self.SAVE_FREQUENCY and self.iterations != 0:
+#        self.textbox += self.time_str() + f"<Saving state>                        \r"
+#        self.save_state()
+#        self.last_save_state_time = last_time
       
       cur_embs_per_group = min(self.MAX_EMBS_PER_GROUP, round(self.MAX_SIMILAR_EMBS * self.MULTIPLIER_LIST[0]))
       embs_thusfar = 0
@@ -829,7 +829,7 @@ class EmbeddingGroupFinder:
 
     self.textbox += self.time_str() + f"<Exiting loop>                             \r"
     self.do_interrupt = False
-    self.save_state()
+#    self.save_state()
     self.save_near_emb_cache()
     
     self.textbox += self.time_str() + f"<Run complete>                             \r"
