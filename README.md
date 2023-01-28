@@ -46,6 +46,8 @@ Increased number of mixer lines, click on arrow to show/hide more lines.
 
 Added 'Binary' eval preset, and made vec_mag, vec_min, vec_max variables available.
 
+v3.0 Merged in embedding solver. Can now find an optimal set of tokens that represents an existing embedding.
+
 # Manual Installation
 
 Download ![embedding-inspector-main.zip](https://github.com/tkalayci71/embedding-inspector/archive/refs/heads/main.zip) and extract into extensions folder.

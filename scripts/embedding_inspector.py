@@ -10,10 +10,12 @@ from modules.shared import cmd_opts
 import torch, os
 from modules.textual_inversion.textual_inversion import Embedding
 import math, random
+from embedding_solver import EmbeddingGroupFinder
 
-MAX_NUM_MIX = 16 # number of embeddings that can be mixed
+MAX_TABS = 20	# max number of tokens to save per embedding.
+MAX_NUM_MIX = 40 # number of tokens that can be mixed to make a new token.
 SHOW_NUM_MIX = 6 # number of mixer lines to show initially
-MAX_SIMILAR_EMBS = 30 # number of similar embeddings to show
+MAX_SIMILAR_EMBS = 30 # number of similar tokens to show
 VEC_SHOW_TRESHOLD = 1 # change to 10000 to see all values
 VEC_SHOW_PROFILE = 'default' #change to 'full' for more precision
 SEP_STR = '-'*80 # separator string
@@ -35,6 +37,9 @@ EVAL_PRESETS = ['None','',
     'Crop_high','=v*(i<maxi//2)',
     'Crop_low','=v*(i>=maxi//2)'
     ]
+
+# ==============================================================================
+
 
 #-------------------------------------------------------------------------------
 
@@ -302,107 +307,108 @@ def do_save(*args):
             step_val = None
             if (step_text!=''): results.append('Step value is invalid, ignoring')
 
+
         # calculate mixed embedding in tot_vec
-        vec_size = None
-        tot_vec = None
-        for k in range(MAX_NUM_MIX):
-            name= args[k].strip().lower()
+        tot_vec_list = []
+        for tab_id in range(MAX_TABS):
+            vec_size = None
+            tot_vec = None
+            for k in range(MAX_NUM_MIX):
+                name= args[k + MAX_NUM_MIX * tab_id].strip().lower()
+                mixval = args[k + MAX_NUM_MIX * (MAX_TABS + tab_id)]
 
-            mixval = args[k+MAX_NUM_MIX]
-            if (name=='') or (mixval==0): continue
-
-            emb_name, emb_id, emb_vec, loaded_emb = get_embedding_info(name)
-            mix_vec = emb_vec.to(device='cpu',dtype=torch.float32)
-
-            if vec_size==None:
-                vec_size = mix_vec.shape[1]
-            else:
-                if vec_size!=mix_vec.shape[1]:
-                    results.append('! Vector size is not compatible, skipping '+emb_name+'('+str(emb_id)+')')
+                if (name=='') or (mixval==0):
                     continue
 
-            if not(concat_mode):
-                if tot_vec==None:
-                    tot_vec = torch.zeros(vec_size).unsqueeze(0)
+                emb_name, emb_id, emb_vec, loaded_emb = get_embedding_info(name)
+                mix_vec = emb_vec.to(device='cpu',dtype=torch.float32)
 
-                if mix_vec.shape[0]!=tot_vec.shape[0]:
-                    padding = torch.zeros(abs(tot_vec.shape[0]-mix_vec.shape[0]),vec_size)
-                    if mix_vec.shape[0]<tot_vec.shape[0]:
-                        mix_vec = torch.cat([mix_vec, padding])
-                    else:
-                        tot_vec = torch.cat([tot_vec, padding])
-
-                tot_vec+= mix_vec * mixval
-                results.append('+ '+emb_name+'('+str(emb_id)+')'+' x '+str(mixval))
-            else:
-                if tot_vec==None:
-                    tot_vec = mix_vec*mixval
+                if vec_size==None:
+                    vec_size = mix_vec.shape[1]
                 else:
-                    tot_vec = torch.cat([tot_vec,mix_vec*mixval])
-                results.append('> '+emb_name+'('+str(emb_id)+')'+' x '+str(mixval))
+                    if vec_size!=mix_vec.shape[1]:
+                        results.append('! Vector size is not compatible, skipping '+emb_name+'('+str(emb_id)+')')
+                        continue
 
-        # save the mixed embedding
-        if (tot_vec==None):
-            results.append('No embeddings were mixed, nothing to save')
-        else:
-            #eval feautre
-            if eval_txt!='':
-                vec = tot_vec.clone()
-                try:
-                    maxn = vec.shape[0]
-                    maxi = vec.shape[1]
-                    for n in range(maxn):
+                if not(concat_mode):
+                    if tot_vec==None:
+                        tot_vec = torch.zeros(vec_size).unsqueeze(0)
 
-                        vec_mag = torch.linalg.norm(vec[n])
-                        vec_min = torch.min(vec[n])
-                        vec_max = torch.max(vec[n])
-
-                        if eval_txt.startswith('='):
-                            #item-wise eval
-                            for i in range(maxi):
-                                v = vec[n,i]
-                                ve = eval(eval_txt[1:]) #strip "="
-                                vec[n,i] = ve
+                    if mix_vec.shape[0]!=tot_vec.shape[0]:
+                        padding = torch.zeros(abs(tot_vec.shape[0]-mix_vec.shape[0]),vec_size)
+                        if mix_vec.shape[0]<tot_vec.shape[0]:
+                            mix_vec = torch.cat([mix_vec, padding])
                         else:
-                            #tensor-wise eval
-                            v = vec[n]
-                            ve = eval(eval_txt)
-                            vec[n] = ve
-                    tot_vec = vec
-                    results.append('Applied eval: "'+eval_txt+'"')
-                except Exception as e:
-                    results.append('🛑 Error evaluating: "'+eval_txt+'" - '+str(e))
+                            tot_vec = torch.cat([tot_vec, padding])
 
-            if (combine_mode and (tot_vec.shape[0]>1)):
-                results.append('combining '+str(tot_vec.shape[0])+' vectors as 1-vector')
-                tot_vec = torch.sum(tot_vec,dim=0,keepdim=True)
+                    tot_vec+= mix_vec * mixval
+                    results.append('+ '+emb_name+'('+str(emb_id)+')'+' x '+str(mixval))
+                else:
+                    if tot_vec==None:
+                        tot_vec = mix_vec*mixval
+                    else:
+                        tot_vec = torch.cat([tot_vec,mix_vec*mixval])
+                    results.append('> '+emb_name+'('+str(emb_id)+')'+' x '+str(mixval))
+            if (tot_vec==None):
+                results.append('No embeddings were mixed, nothing to save')
+            else:
+                #eval feautre
+                if eval_txt!='':
+                    vec = tot_vec.clone()
+                    try:
+                        maxn = vec.shape[0]
+                        maxi = vec.shape[1]
+                        for n in range(maxn):
+                            vec_mag = torch.linalg.norm(vec[n])
+                            vec_min = torch.min(vec[n])
+                            vec_max = torch.max(vec[n])
 
+                            if eval_txt.startswith('='):
+                                #item-wise eval
+                                for i in range(maxi):
+                                    v = vec[n,i]
+                                    ve = eval(eval_txt[1:]) #strip "="
+                                    vec[n,i] = ve
+                            else:
+                                #tensor-wise eval
+                                v = vec[n]
+                                ve = eval(eval_txt)
+                                vec[n] = ve
+                        tot_vec = vec
+                        results.append('Applied eval: "'+eval_txt+'"')
+                    except Exception as e:
+                        results.append('🛑 Error evaluating: "'+eval_txt+'" - '+str(e))
 
-            if REMOVE_ZEROED_VECTORS:
-                old_count = tot_vec.shape[0]
-                tot_vec = tot_vec[torch.count_nonzero(tot_vec,dim=1)>0]
-                new_count = tot_vec.shape[0]
-                if (old_count!=new_count): results.append('Removed '+str(old_count-new_count)+' zeroed vectors, remaining vectors: '+str(new_count))
+                if (combine_mode and (tot_vec.shape[0]>1)):
+                    results.append('combining '+str(tot_vec.shape[0])+' vectors as 1-vector')
+                    tot_vec = torch.sum(tot_vec,dim=0,keepdim=True)
 
-            if tot_vec.shape[0]>0:
+                if REMOVE_ZEROED_VECTORS:
+                    old_count = tot_vec.shape[0]
+                    tot_vec = tot_vec[torch.count_nonzero(tot_vec,dim=1)>0]
+                    new_count = tot_vec.shape[0]
+                    if (old_count!=new_count):
+                        results.append('Removed '+str(old_count-new_count)+' zeroed vectors, remaining vectors: '+str(new_count))
 
+            if tot_vec.shape[0] > 0:
                 results.append('Final embedding size: '+str(tot_vec.shape[0])+' x '+str(tot_vec.shape[1]))
-
-                if tot_vec.shape[0]>75:
+                if tot_vec_list.shape[0]>75:
                     results.append('⚠️WARNING: vector count>75, it may not work 🛑')
+                tot_vec_list.append(tot_vec)
 
-                new_emb = Embedding(tot_vec, save_name)
-                if (step_val!=None):
-                    new_emb.step = step_val
-                    results.append('Setting step value to '+str(step_val))
+        if tot_vec_list.shape[0] > 0:
+            new_emb = Embedding(tot_vec_list, save_name)
+            if (step_val!=None):
+                new_emb.step = step_val
+                results.append('Setting step value to '+str(step_val))
 
-                try:
-                    new_emb.save(save_filename)
-                    results.append('Saved "'+save_filename+'"')
-                    anything_saved = True
+            try:
+                new_emb.save(save_filename)
+                results.append('Saved "'+save_filename+'"')
+                anything_saved = True
 
-                except:
-                    results.append('🛑 Error saving "'+save_filename+'" (filename might be invalid)')
+            except:
+                results.append('🛑 Error saving "'+save_filename+'" (filename might be invalid)')
 
             #------------- end batch loop
 
@@ -443,6 +449,7 @@ def fig2img(fig):
     img.load()
     buf.close()
     return img
+
 #-------------------------------------------------------------------------------
 
 def do_listloaded():
@@ -481,7 +488,7 @@ def do_minitokenize(*args):
     mini_sendtomix = args[-2]
     concat_mode = args[-3]
     combine_mode = args[-4]
-    mix_inputs = args[0:MAX_NUM_MIX]
+    mix_inputs = args[0:MAX_NUM_MIX*MAX_TABS]
 
     tokenizer, internal_embs, loaded_embs = get_data()
 
@@ -496,7 +503,8 @@ def do_minitokenize(*args):
         embstr = emb_id_to_name(found_ids[i],tokenizer)
         results.append(embstr+' '+idstr+'  ')
         if (mini_sendtomix==True):
-            if (i<MAX_NUM_MIX): mix_inputs_list[i]=idstr
+            if (i<MAX_NUM_MIX):
+                mix_inputs_list[i]=idstr
 
     if (mini_sendtomix==True):
         concat_mode = True
@@ -511,8 +519,8 @@ def do_minitokenize(*args):
 
 def do_reset(*args):
 
-    mix_inputs_list = [''] * MAX_NUM_MIX
-    mix_slider_list = [1.0] * MAX_NUM_MIX
+    mix_inputs_list = [''] * (MAX_NUM_MIX*MAX_TABS)
+    mix_slider_list = [1.0] * (MAX_NUM_MIX*MAX_TABS)
 
     return *mix_inputs_list, *mix_slider_list
 
@@ -533,6 +541,7 @@ def do_eval_preset(*args):
 #-------------------------------------------------------------------------------
 
 def add_tab():
+    global egf
 
     with gr.Blocks(analytics_enabled=False) as ui:
         with gr.Tabs():
@@ -559,10 +568,27 @@ def add_tab():
                             mini_sendtomix = gr.Checkbox(value=False, label="Send IDs to mixer")
                         mini_result = gr.Textbox(label="Tokens", lines=1)
 
+                    with gr.Column(variant='panel'):
+                        required_input = gr.Textbox(label="Essential tokens (semicolon-separated; options separated by commas; end with * to allow multi-token words)", lines=1, placeholder="painting;impressionism,impressionist,impression*")
+                        with gr.Row():
+                            optional_input = gr.Textbox(label="Suggested tokens (semicolon-separated; end with * to allow multi-token words)", lines=1, placeholder="monet;renoir;sisley;baz*;brush;oil;light;canvas")
+                        with gr.Row():
+                            target_path = gr.Textbox(label="Path to an embedding that you wish to recreate out of preexisting tokens", lines=1, placeholder="/foo/bar/some_embedding.bin or /foo/bar/some_embedding.pt")
+                        with gr.Row():
+#                            count = gr.Number(label="# of tokens", precision=0, value="10")
+                            precache = gr.Checkbox(value=False, label="Precache (takes a long time, but speeds up future runs for the current token list)")
+                        with gr.Row():
+                            calculate = gr.Button(value="Calculate", variant="primary")
+                            interrupt = gr.Button(value="Finish current tab")
+                            breakout = gr.Button(value="Stop calculation")
+
                 with gr.Column(variant='panel'):
                     with gr.Row():
                         gr.Column(variant='panel')
                         reset_button = gr.Button(value="Reset mixer")
+
+                    with gr.Row():
+                        tab_group = gr.TabGroup([f"{i+1}" for i in range(MAX_TABS)])
 
                     mix_inputs = []
                     mix_sliders = []
@@ -570,20 +596,25 @@ def add_tab():
                     global SHOW_NUM_MIX
                     if SHOW_NUM_MIX>MAX_NUM_MIX: SHOW_NUM_MIX=MAX_NUM_MIX
 
-                    for n in range(SHOW_NUM_MIX):
-                        with gr.Row():
-                           with gr.Column():
-                               mix_inputs.append(gr.Textbox(label="Name "+str(n), lines=1, placeholder="Enter name of token/embedding or ID"))
-                           with gr.Column():
-                               mix_sliders.append(gr.Slider(label="Multiplier",value=1.0,minimum=-1.0, maximum=1.0, step=0.1))
-                    if MAX_NUM_MIX>SHOW_NUM_MIX:
-                        with gr.Accordion('',open=False):
-                            for n in range(SHOW_NUM_MIX,MAX_NUM_MIX):
-                                with gr.Row():
-                                   with gr.Column():
-                                       mix_inputs.append(gr.Textbox(label="Name "+str(n), lines=1, placeholder="Enter name of token/embedding or ID"))
-                                   with gr.Column():
-                                       mix_sliders.append(gr.Slider(label="Multiplier",value=1.0,minimum=-1.0, maximum=1.0, step=0.1))
+
+                    for tab_id in range(MAX_TABS):
+                        tab = tab_group.tabs[ŧab_id]
+                        for n in range(SHOW_NUM_MIX):
+                            tab.add_row(gr.Row())
+                            with tab.rows[-1]:
+                               with gr.Column():
+                                   mix_inputs.append(gr.Textbox(label="Name "+str(n), lines=1, placeholder="Enter name of token/embedding or ID"))
+                               with gr.Column():
+                                   mix_sliders.append(gr.Slider(label="Multiplier",value=1.0,minimum=-1.0, maximum=1.0, step=0.1))
+                          if MAX_NUM_MIX>SHOW_NUM_MIX:
+                            with gr.Accordion('',open=False):
+                                for n in range(SHOW_NUM_MIX,MAX_NUM_MIX):
+                                    tab.add_row(gr.Row())
+                                    with tab.rows[-1]:
+                                        with gr.Column():
+                                           mix_inputs.append(gr.Textbox(label="Name "+str(n), lines=1, placeholder="Enter name of token/embedding or ID"))
+                                       with gr.Column():
+                                           mix_sliders.append(gr.Slider(label="Multiplier",value=1.0,minimum=-1.0, maximum=1.0, step=0.1))
 
                     with gr.Row():
                             with gr.Column():
@@ -605,7 +636,7 @@ def add_tab():
                         enable_overwrite = gr.Checkbox(value=False,label="Enable overwrite")
 
                     with gr.Row():
-                        save_result = gr.Textbox(label="Log", lines=10)
+                        save_result = gr.Textbox(label="Log", lines=40)
                         save_graph = gr.Image()
 
             listloaded_button.click(fn=do_listloaded, outputs=inspect_result)
@@ -619,7 +650,22 @@ def add_tab():
             presets_dropdown.change(do_eval_preset,inputs=presets_dropdown,outputs=eval_box)
 
             save_vector_button.click(fn=do_save_vector,inputs = [text_input, save_vector_name])
-
+            
+            ui.run_forever(egf.get_outputs, inputs=[inspect_result] + mix_inputs + mix_sliders, outputs=[inspect_result] + mix_inputs + mix_sliders, every=0.05)
+            required_input.change(fn=egf.set_required, inputs=required_input)
+            optional_input.change(fn=egf.set_optional, inputs=optional_input)
+            target_path.change(fn=egf.load_target, inputs=[target_path, inspect_results], outputs=inspect_result)
+            count.change(fn=egf.set_count, inputs=count)
+            precache.change(fn=egf.set_precache, inputs=precache)
+            calculate.click(fn=egf.solve)
+            interrupt.click(fn=egf.interrupt)
+            breakout.click(fn=egf.breakout)
+            
     return [(ui, "Embedding Inspector", "inspector")]
+
+
+# ==================================================
+
+egf = EmbeddingGroupFinder()
 
 script_callbacks.on_ui_tabs(add_tab)
