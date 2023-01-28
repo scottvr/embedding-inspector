@@ -13,7 +13,7 @@ import math, random
 from embedding_solver import EmbeddingGroupFinder
 
 MAX_TABS = 20	# max number of tokens to save per embedding.
-MAX_NUM_MIX = 50 # number of tokens that can be mixed to make a new token.
+MAX_NUM_MIX = 100 # number of tokens that can be mixed to make a new token.
 SHOW_NUM_MIX = 6 # number of mixer lines to show initially
 MAX_SIMILAR_EMBS = 30 # number of similar tokens to show
 VEC_SHOW_TRESHOLD = 1 # change to 10000 to see all values

@@ -24,6 +24,7 @@ class EmbeddingGroupFinder:
   MULTIPLIER_LIST = [5,2.5,1.6,1.25,1]
   MIN_OPT_ITER = 8
   MAX_OPT_ITER = 80
+  MAX_EMBS_PER_GROUP = 200
   OPT_SCALAR = 170
   USE_WEIGHT_PENALTY1 = False
   USE_WEIGHT_PENALTY2 = False	
@@ -617,7 +618,7 @@ class EmbeddingGroupFinder:
         self.save_state()
         self.last_save_state_time = last_time
       
-      cur_embs_per_group = round(self.MAX_SIMILAR_EMBS * self.MULTIPLIER_LIST[0])
+      cur_embs_per_group = min(self.MAX_EMBS_PER_GROUP, round(self.MAX_SIMILAR_EMBS * self.MULTIPLIER_LIST[0]))
       embs_thusfar = 0
 
       self.textbox += self.time_str() + f"<Creating embedding group>                        \r"
